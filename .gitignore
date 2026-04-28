@@ -1,0 +1,36 @@
+# Python Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment (exclude actual env files, but keep requirements.txt)
+venv/
+env/
+.env
+.venv
+
+# Database (Ignore local SQLite databases; keep production DB config separate)
+*.sqlite3
+
+# Static & Media (Typically handled by CDN or cloud storage in production)
+static/
+media/
+
+# Environment Variables & Secrets (CRITICAL for security)
+.env
+local_settings.py
+
+# IDE / Editor Settings
+.vscode/
+.idea/
+*.swp
+
+# Testing and Coverage
+.tox/
+.coverage
+.cache
+htmlcov/
+.pytest_cache/
+
+# Logs
+*.log
