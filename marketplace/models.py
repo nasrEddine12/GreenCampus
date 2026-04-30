@@ -51,6 +51,9 @@ class Listing(models.Model):
     )
     title = models.CharField(max_length=180)
     description = models.TextField()
+    image = models.ImageField(upload_to="listings/", blank=True, default="")
+    image_url = models.URLField(max_length=500, blank=True, default="")
+    campus = models.CharField(max_length=120, blank=True, default="")
     condition = models.CharField(max_length=20, choices=Condition.choices, default=Condition.GOOD)
     price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     eco_score = models.PositiveSmallIntegerField(
@@ -66,6 +69,51 @@ class Listing(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class ContactMessage(models.Model):
+    class Status(models.TextChoices):
+        SENT = "sent", "Sent"
+        READ = "read", "Read"
+        REPLIED = "replied", "Replied"
+
+    listing = models.ForeignKey(
+        Listing,
+        on_delete=models.CASCADE,
+        related_name="contact_messages",
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sent_contact_messages",
+    )
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="received_contact_messages",
+    )
+    message = models.TextField()
+    reply = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SENT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def clean(self):
+        if self.sender_id and self.recipient_id and self.sender_id == self.recipient_id:
+            raise ValidationError({"listing": "You cannot contact yourself about your own listing."})
+
+        if self.listing_id and self.recipient_id and self.listing.seller_id != self.recipient_id:
+            raise ValidationError({"recipient": "Contact recipient must be the listing seller."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.sender} -> {self.recipient} about {self.listing}"
 
 
 class Favorite(models.Model):

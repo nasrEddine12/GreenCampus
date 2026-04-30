@@ -31,10 +31,13 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Create the user with a hashed password and trigger verification email."""
         user = User.objects.create_user(**validated_data)
-        token, verify_url = self._send_verification_email(user)
-        # Store for the view to use in DEBUG mode
-        self._verification_token = token
-        self._verification_url = verify_url
+
+        if settings.DEBUG:
+            user.is_verified = True
+            user.save(update_fields=["is_verified"])
+            return user
+
+        self._send_verification_email(user)
         return user
 
     def _send_verification_email(self, user):
@@ -99,7 +102,11 @@ class LoginSerializer(serializers.Serializer):
         if user is None:
             raise serializers.ValidationError({"detail": "Invalid email or password."})
 
-        if getattr(settings, "EMAIL_VERIFICATION_REQUIRED", True) and not user.is_verified:
+        verification_required = (
+            getattr(settings, "EMAIL_VERIFICATION_REQUIRED", True)
+            and not settings.DEBUG
+        )
+        if verification_required and not user.is_verified:
             raise PermissionDenied(
                 detail="Email not verified. Please verify your email before logging in."
             )

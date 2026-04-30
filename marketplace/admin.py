@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Category, Favorite, Listing, Report, Review, Transaction
+from .models import Category, ContactMessage, Favorite, Listing, Report, Review, Transaction
 
 
 @admin.register(Category)
@@ -21,6 +21,13 @@ class ListingAdmin(admin.ModelAdmin):
 class FavoriteAdmin(admin.ModelAdmin):
     list_display = ["user", "listing", "created_at"]
     search_fields = ["user__email", "listing__title"]
+
+
+@admin.register(ContactMessage)
+class ContactMessageAdmin(admin.ModelAdmin):
+    list_display = ["listing", "sender", "recipient", "status", "created_at"]
+    list_filter = ["status", "created_at"]
+    search_fields = ["listing__title", "sender__email", "recipient__email", "message", "reply"]
 
 
 @admin.register(Transaction)

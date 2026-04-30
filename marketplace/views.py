@@ -1,12 +1,15 @@
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
 
-from .models import Category, Favorite, Listing, Report, Review, Transaction
-from .permissions import IsListingOwnerOrReadOnly, IsTransactionParticipant
+from .models import Category, ContactMessage, Favorite, Listing, Report, Review, Transaction
+from .permissions import IsContactParticipant, IsListingOwnerOrReadOnly, IsTransactionParticipant
 from .serializers import (
     CategorySerializer,
+    ContactMessageSerializer,
+    ContactMessageUpdateSerializer,
     FavoriteSerializer,
     ListingSerializer,
     ReportSerializer,
@@ -27,6 +30,7 @@ class CategoryListCreateView(generics.ListCreateAPIView):
 
 class ListingListCreateView(generics.ListCreateAPIView):
     serializer_class = ListingSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
         queryset = Listing.objects.select_related("seller", "category").all()
@@ -46,6 +50,31 @@ class ListingListCreateView(generics.ListCreateAPIView):
         if available is not None:
             queryset = queryset.filter(is_available=available.lower() == "true")
 
+        condition = self.request.query_params.get("condition")
+        if condition:
+            queryset = queryset.filter(condition=condition)
+
+        min_price = self.request.query_params.get("min_price")
+        if min_price:
+            queryset = queryset.filter(price__gte=min_price)
+
+        max_price = self.request.query_params.get("max_price")
+        if max_price:
+            queryset = queryset.filter(price__lte=max_price)
+
+        owner = self.request.query_params.get("owner")
+        if owner == "me" and self.request.user.is_authenticated:
+            queryset = queryset.filter(seller=self.request.user)
+
+        sort = self.request.query_params.get("sort")
+        ordering = {
+            "oldest": "created_at",
+            "price_asc": "price",
+            "price_desc": "-price",
+            "newest": "-created_at",
+        }
+        queryset = queryset.order_by(ordering.get(sort, "-created_at"))
+
         return queryset
 
     def get_permissions(self):
@@ -60,7 +89,49 @@ class ListingListCreateView(generics.ListCreateAPIView):
 class ListingDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Listing.objects.select_related("seller", "category").all()
     serializer_class = ListingSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     permission_classes = [IsAuthenticatedOrReadOnly, IsListingOwnerOrReadOnly]
+
+
+class MyListingListView(generics.ListAPIView):
+    serializer_class = ListingSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Listing.objects.filter(seller=self.request.user).select_related("seller", "category")
+
+
+class ContactMessageListCreateView(generics.ListCreateAPIView):
+    serializer_class = ContactMessageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = ContactMessage.objects.filter(
+            Q(sender=self.request.user) | Q(recipient=self.request.user)
+        ).select_related("listing", "listing__category", "sender", "recipient")
+
+        box = self.request.query_params.get("box", "").lower()
+        if box == "sent":
+            queryset = queryset.filter(sender=self.request.user)
+        elif box == "received":
+            queryset = queryset.filter(recipient=self.request.user)
+
+        listing_id = self.request.query_params.get("listing")
+        if listing_id:
+            queryset = queryset.filter(listing_id=listing_id)
+
+        return queryset
+
+
+class ContactMessageDetailView(generics.RetrieveUpdateAPIView):
+    queryset = ContactMessage.objects.select_related("listing", "listing__category", "sender", "recipient")
+    serializer_class = ContactMessageSerializer
+    permission_classes = [IsAuthenticated, IsContactParticipant]
+
+    def get_serializer_class(self):
+        if self.request.method in {"PUT", "PATCH"}:
+            return ContactMessageUpdateSerializer
+        return ContactMessageSerializer
 
 
 class FavoriteListCreateView(generics.ListCreateAPIView):
