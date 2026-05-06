@@ -14,6 +14,16 @@ urlpatterns = [
     # Admin moderation
     path('admin/users/', admin_views.AdminUserListView.as_view(), name='admin-user-list'),
     path('admin/stats/', admin_views.AdminStatsView.as_view(), name='admin-stats'),
+    path(
+        'admin/users/<int:user_id>/moderation/',
+        admin_views.AdminUserModerationActionView.as_view(),
+        name='admin-user-moderation',
+    ),
+    path(
+        'admin/users/<int:user_id>/delete/',
+        admin_views.AdminUserDeleteView.as_view(),
+        name='admin-user-delete',
+    ),
     path('admin/users/<int:user_id>/suspend/', admin_views.AdminSuspendUserView.as_view(), name='admin-suspend'),
     path('admin/users/<int:user_id>/blacklist/', admin_views.AdminBlacklistUserView.as_view(), name='admin-blacklist'),
     path('admin/users/<int:user_id>/reactivate/', admin_views.AdminReactivateUserView.as_view(), name='admin-reactivate'),

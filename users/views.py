@@ -32,12 +32,10 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        data = {"detail": "Registration successful. Check your email to verify your account."}
-
-        # In development, include the token so developers can verify without email
         if settings.DEBUG:
-            data["verification_token"] = getattr(serializer, "_verification_token", "")
-            data["verification_url"] = getattr(serializer, "_verification_url", "")
+            data = {"detail": "Account created successfully. You can now sign in."}
+        else:
+            data = {"detail": "Registration successful. Check your email to verify your account."}
 
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -109,6 +107,7 @@ class ProfileView(APIView):
 
     def get(self, request):
         """Return profile data for the logged-in user."""
+        request.user.expire_suspension_if_needed()
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

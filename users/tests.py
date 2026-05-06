@@ -184,12 +184,14 @@ class AdminModerationTests(APITestCase):
         self.suspend_url = reverse("users:admin-suspend", kwargs={"user_id": self.target.pk})
         self.blacklist_url = reverse("users:admin-blacklist", kwargs={"user_id": self.target.pk})
         self.reactivate_url = reverse("users:admin-reactivate", kwargs={"user_id": self.target.pk})
+        self.moderation_url = reverse("users:admin-user-moderation", kwargs={"user_id": self.target.pk})
+        self.delete_url = reverse("users:admin-user-delete", kwargs={"user_id": self.target.pk})
 
     def _auth_as(self, user):
         token = str(RefreshToken.for_user(user).access_token)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
-    # ── 1. Admin can suspend a user ──────────────────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ 1. Admin can suspend a user Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     def test_admin_can_suspend_user(self):
         self._auth_as(self.admin)
         response = self.client.post(
@@ -203,7 +205,7 @@ class AdminModerationTests(APITestCase):
         self.assertEqual(self.target.suspension_reason, "Repeated violations")
         self.assertIsNotNone(self.target.suspended_at)
 
-    # ── 2. Suspended user is blocked from login ──────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ 2. Suspended user is blocked from login Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     def test_suspended_user_blocked_from_login(self):
         self.target.is_suspended = True
         self.target.suspension_reason = "Test suspension"
@@ -217,7 +219,7 @@ class AdminModerationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertIn("suspended", response.data["detail"].lower())
 
-    # ── 3. Admin can blacklist a user ────────────────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ 3. Admin can blacklist a user Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     def test_admin_can_blacklist_user(self):
         self._auth_as(self.admin)
         response = self.client.post(
@@ -231,7 +233,7 @@ class AdminModerationTests(APITestCase):
         self.assertEqual(self.target.blacklist_reason, "Fraud detected")
         self.assertIsNotNone(self.target.blacklisted_at)
 
-    # ── 4. Blacklisted user is blocked from login ────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ 4. Blacklisted user is blocked from login Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     def test_blacklisted_user_blocked_from_login(self):
         self.target.is_blacklisted = True
         self.target.blacklist_reason = "Test blacklist"
@@ -245,7 +247,7 @@ class AdminModerationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertIn("blacklisted", response.data["detail"].lower())
 
-    # ── 5. Admin can reactivate a user ───────────────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ 5. Admin can reactivate a user Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     def test_admin_can_reactivate_user(self):
         self.target.is_suspended = True
         self.target.is_blacklisted = True
@@ -261,12 +263,117 @@ class AdminModerationTests(APITestCase):
         self.assertIsNone(self.target.suspension_reason)
         self.assertIsNone(self.target.blacklist_reason)
 
-    # ── 6. Normal user cannot call moderation endpoints ──────
+    def test_admin_can_toggle_contact_and_deactivate_user(self):
+        self._auth_as(self.admin)
+
+        disable_response = self.client.post(
+            self.moderation_url,
+            {"action": "disable_contact", "reason": "DM abuse"},
+            format="json",
+        )
+        self.assertEqual(disable_response.status_code, status.HTTP_200_OK)
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.can_contact)
+
+        enable_response = self.client.post(
+            self.moderation_url,
+            {"action": "enable_contact"},
+            format="json",
+        )
+        self.assertEqual(enable_response.status_code, status.HTTP_200_OK)
+        self.target.refresh_from_db()
+        self.assertTrue(self.target.can_contact)
+
+        deactivate_response = self.client.post(
+            self.moderation_url,
+            {"action": "deactivate", "reason": "Local test"},
+            format="json",
+        )
+        self.assertEqual(deactivate_response.status_code, status.HTTP_200_OK)
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.is_active)
+
+    def test_admin_cannot_moderate_admin_user(self):
+        self._auth_as(self.admin)
+        admin_url = reverse("users:admin-user-moderation", kwargs={"user_id": self.admin.pk})
+
+        response = self.client.post(admin_url, {"action": "suspend", "reason": "Nope"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_admin_can_delete_normal_user(self):
+        self._auth_as(self.admin)
+
+        response = self.client.delete(self.delete_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(User.objects.filter(pk=self.target.pk).exists())
+        login_response = self.client.post(
+            self.login_url,
+            {"email": "target@emsi.ma", "password": "TargetPass123"},
+            format="json",
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_normal_user_cannot_delete_user(self):
+        self._auth_as(self.normal)
+
+        response = self.client.delete(self.delete_url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(User.objects.filter(pk=self.target.pk).exists())
+
+    def test_admin_cannot_delete_self(self):
+        self._auth_as(self.admin)
+        self_url = reverse("users:admin-user-delete", kwargs={"user_id": self.admin.pk})
+
+        response = self.client.delete(self_url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(User.objects.filter(pk=self.admin.pk).exists())
+
+    def test_cannot_delete_last_admin_account(self):
+        lone_admin = User.objects.create_user(
+            username="loneadmin",
+            email="loneadmin@emsi.ma",
+            password="AdminPass123",
+            is_verified=True,
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.admin.is_staff = False
+        self.admin.is_superuser = False
+        self.admin.save(update_fields=["is_staff", "is_superuser"])
+        self._auth_as(lone_admin)
+        lone_delete_url = reverse("users:admin-user-delete", kwargs={"user_id": lone_admin.pk})
+
+        response = self.client.delete(lone_delete_url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(User.objects.filter(pk=lone_admin.pk).exists())
+
+    def test_staff_admin_cannot_delete_another_admin(self):
+        other_admin = User.objects.create_user(
+            username="otheradmin",
+            email="otheradmin@emsi.ma",
+            password="AdminPass123",
+            is_verified=True,
+            is_staff=True,
+        )
+        self._auth_as(self.admin)
+        other_admin_url = reverse("users:admin-user-delete", kwargs={"user_id": other_admin.pk})
+
+        response = self.client.delete(other_admin_url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(User.objects.filter(pk=other_admin.pk).exists())
+
+    # Ã¢â€â‚¬Ã¢â€â‚¬ 6. Normal user cannot call moderation endpoints Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     def test_normal_user_cannot_call_moderation_endpoints(self):
         self._auth_as(self.normal)
 
-        for url in [self.suspend_url, self.blacklist_url, self.reactivate_url]:
-            response = self.client.post(url, {"reason": "Attempt"}, format="json")
+        for url in [self.suspend_url, self.blacklist_url, self.reactivate_url, self.moderation_url]:
+            response = self.client.post(url, {"reason": "Attempt", "action": "suspend"}, format="json")
             self.assertEqual(
                 response.status_code,
                 status.HTTP_403_FORBIDDEN,
@@ -277,3 +384,20 @@ class AdminModerationTests(APITestCase):
         list_url = reverse("users:admin-user-list")
         response = self.client.get(list_url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        stats_url = reverse("users:admin-stats")
+        response = self.client.get(stats_url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_stats_returns_chart_datasets(self):
+        self._auth_as(self.admin)
+        stats_url = reverse("users:admin-stats")
+
+        response = self.client.get(stats_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("chart_total_users_over_time", response.data)
+        self.assertIn("chart_new_users_by_day", response.data)
+        self.assertIn("chart_users_by_filiere", response.data)
+        self.assertIn("chart_listings_by_status", response.data)
+        self.assertIn("chart_contact_messages_over_time", response.data)

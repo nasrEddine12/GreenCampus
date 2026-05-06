@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 
 def validate_emsi_email(value):
@@ -23,17 +24,40 @@ class User(AbstractUser):
     is_suspended = models.BooleanField(default=False)
     suspension_reason = models.TextField(blank=True, null=True)
     suspended_at = models.DateTimeField(blank=True, null=True)
+    suspension_until = models.DateTimeField(blank=True, null=True)
 
     # Blacklist
     is_blacklisted = models.BooleanField(default=False)
     blacklist_reason = models.TextField(blank=True, null=True)
     blacklisted_at = models.DateTimeField(blank=True, null=True)
 
+    # Contact permissions
+    can_contact = models.BooleanField(default=True)
+
     # Overdue tracking
     overdue_count = models.PositiveIntegerField(default=0)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
+
+    def suspension_is_active(self):
+        if not self.is_suspended:
+            return False
+        if self.suspension_until and self.suspension_until <= timezone.now():
+            return False
+        return True
+
+    def expire_suspension_if_needed(self, save=True):
+        if not self.is_suspended or not self.suspension_until:
+            return False
+        if self.suspension_until > timezone.now():
+            return False
+
+        self.is_suspended = False
+        self.can_contact = True
+        if save:
+            self.save(update_fields=["is_suspended", "can_contact"])
+        return True
 
     def __str__(self):
         return self.email
