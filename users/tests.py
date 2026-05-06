@@ -206,7 +206,7 @@ class AdminModerationTests(APITestCase):
         self.assertIsNotNone(self.target.suspended_at)
 
     # Ã¢â€â‚¬Ã¢â€â‚¬ 2. Suspended user is blocked from login Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    def test_suspended_user_blocked_from_login(self):
+    def test_suspended_user_can_login_and_see_profile_status(self):
         self.target.is_suspended = True
         self.target.suspension_reason = "Test suspension"
         self.target.save(update_fields=["is_suspended", "suspension_reason"])
@@ -216,8 +216,14 @@ class AdminModerationTests(APITestCase):
             {"email": "target@emsi.ma", "password": "TargetPass123"},
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertIn("suspended", response.data["detail"].lower())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access", response.data)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {response.data['access']}")
+        profile_response = self.client.get(reverse("users:profile"))
+        self.assertEqual(profile_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(profile_response.data["is_suspended"])
+        self.assertEqual(profile_response.data["suspension_reason"], "Test suspension")
 
     # Ã¢â€â‚¬Ã¢â€â‚¬ 3. Admin can blacklist a user Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     def test_admin_can_blacklist_user(self):

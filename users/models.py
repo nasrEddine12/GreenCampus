@@ -40,15 +40,23 @@ class User(AbstractUser):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 
+    def is_overdue_suspension(self):
+        """Return whether the active suspension came from overdue loan enforcement."""
+        return "overdue" in (self.suspension_reason or "").lower()
+
     def suspension_is_active(self):
         if not self.is_suspended:
             return False
+        if self.is_overdue_suspension():
+            return True
         if self.suspension_until and self.suspension_until <= timezone.now():
             return False
         return True
 
     def expire_suspension_if_needed(self, save=True):
         if not self.is_suspended or not self.suspension_until:
+            return False
+        if self.is_overdue_suspension():
             return False
         if self.suspension_until > timezone.now():
             return False

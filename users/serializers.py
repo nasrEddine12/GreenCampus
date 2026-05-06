@@ -117,10 +117,6 @@ class LoginSerializer(serializers.Serializer):
             )
 
         user.expire_suspension_if_needed()
-        if user.suspension_is_active():
-            raise PermissionDenied(
-                detail="Your account is suspended."
-            )
 
         attrs["user"] = user
         return attrs

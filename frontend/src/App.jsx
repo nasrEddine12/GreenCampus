@@ -41,6 +41,8 @@ const emptyFilters = {
   sort: 'newest',
 }
 const acceptedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
+const suspendedAccountMessage = 'Your account is suspended. Please contact admin to reactivate your account.'
+const suspendedMarketplaceActionMessage = 'Your account is suspended because an overdue item was not returned.'
 const previewCategories = ['Books', 'Electronics', 'Clothes', 'Supplies', 'Furniture', 'Free/donation items']
 const landingFeatures = [
   ['Student-only marketplace', 'GreenCampus keeps the community focused on EMSI students and campus life.'],
@@ -335,6 +337,13 @@ function listingPriceLabel(listingType) {
   return 'Sale price'
 }
 
+function imageSizeProps(listing) {
+  const width = Number(listing?.image_width)
+  const height = Number(listing?.image_height)
+  if (!width || !height) return {}
+  return { width, height }
+}
+
 function badgeToneForListingStatus(status) {
   if (['sold', 'donated', 'exchanged'].includes(status)) return 'gc-badge--admin'
   if (['loaned', 'reserved'].includes(status)) return 'gc-badge--warn'
@@ -424,6 +433,95 @@ function formatDeadline(value) {
   if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} remaining`
   const days = Math.ceil(hours / 24)
   return `${days} day${days === 1 ? '' : 's'} remaining`
+}
+
+function buildTransactionTimeline(transaction) {
+  const isLoan = transaction.transaction_type === 'loan'
+  const wasOverdue = Boolean(transaction.status === 'overdue' || transaction.was_ever_overdue)
+  const status = transaction.status
+  const type = transaction.transaction_type
+
+  const stepsByType = {
+    sale: [
+      { key: 'request', label: 'Request' },
+      { key: 'accepted', label: 'Accepted' },
+      { key: 'meeting', label: 'Meeting scheduled' },
+      { key: 'sold', label: 'Sold / completed' },
+    ],
+    exchange: [
+      { key: 'request', label: 'Request' },
+      { key: 'accepted', label: 'Accepted' },
+      { key: 'meeting', label: 'Meeting scheduled' },
+      { key: 'completed', label: 'Completed' },
+    ],
+    donate: [
+      { key: 'request', label: 'Request' },
+      { key: 'accepted', label: 'Accepted' },
+      { key: 'meeting', label: 'Meeting scheduled' },
+      { key: 'completed', label: 'Completed' },
+    ],
+  }
+
+  const loanSteps = [
+    { key: 'request', label: 'Request' },
+    { key: 'accepted', label: 'Accepted' },
+    { key: 'meeting', label: 'Meeting scheduled' },
+    { key: 'active_loan', label: 'Loan active' },
+    ...(wasOverdue ? [{ key: 'overdue', label: 'Overdue' }] : []),
+    { key: 'returned', label: 'Returned' },
+  ]
+
+  const steps = isLoan ? loanSteps : (stepsByType[type] || stepsByType.sale)
+  const finalStatuses = ['returned', 'sold', 'completed']
+  const closedStatuses = ['rejected', 'cancelled']
+  const loanIndexMap = {
+    pending: 0,
+    accepted: 1,
+    meeting_scheduled: 2,
+    handed_over: 2,
+    active_loan: 3,
+    overdue: steps.findIndex((step) => step.key === 'overdue'),
+    returned: steps.length - 1,
+  }
+  const standardIndexMap = {
+    pending: 0,
+    accepted: 1,
+    meeting_scheduled: 2,
+    handed_over: 2,
+    sold: steps.length - 1,
+    completed: steps.length - 1,
+  }
+
+  let currentIndex = isLoan ? loanIndexMap[status] : standardIndexMap[status]
+  if (currentIndex === undefined || currentIndex < 0) currentIndex = closedStatuses.includes(status) ? 0 : 0
+
+  const isFinal = finalStatuses.includes(status)
+  const stepStates = steps.map((step, index) => {
+    if (status === 'overdue' && step.key === 'overdue') return 'danger'
+    if (isFinal && index <= currentIndex) return 'done'
+    if (index < currentIndex) return 'done'
+    if (index === currentIndex && !closedStatuses.includes(status)) return 'current'
+    return 'future'
+  })
+
+  const dueText = transaction.expected_return_date ? ` Due ${formatDate(transaction.expected_return_date)}.` : ''
+  const meetingText = transaction.meeting_datetime ? ` Meeting: ${formatDateTime(transaction.meeting_datetime)}.` : ''
+  const explanations = {
+    pending: ['Request sent', 'Waiting for the seller to accept or reject this request.', 'neutral'],
+    accepted: ['Accepted', 'The request is accepted. Schedule or confirm a campus meeting next.', 'active'],
+    meeting_scheduled: ['Meeting scheduled', `A campus handoff is planned.${meetingText}`, 'active'],
+    handed_over: ['Handoff recorded', 'The item handoff is recorded. Finish the transaction when the exchange is complete.', 'active'],
+    active_loan: ['Loan active', `The borrower currently has the item.${dueText}`, 'active'],
+    overdue: ['Overdue', `The return due date has passed and the item has not been returned yet.${dueText}`, 'danger'],
+    returned: ['Returned', 'The loan item has been returned and the transaction is closed.', 'success'],
+    sold: ['Sold', 'The sale is marked sold and the transaction is closed.', 'success'],
+    completed: ['Completed', 'The exchange or donation is completed and closed.', 'success'],
+    rejected: ['Rejected', 'This request was rejected and no handoff should happen.', 'danger'],
+    cancelled: ['Cancelled', 'This request was cancelled and no handoff should happen.', 'danger'],
+  }
+
+  const [title, text, tone] = explanations[status] || ['Status updated', 'This transaction uses the latest backend status.', 'neutral']
+  return { steps, stepStates, currentIndex, title, text, tone }
 }
 
 function initials(profile) {
@@ -779,7 +877,7 @@ function LandingPage({ onAuthPage, setError }) {
             {listings.map((listing, index) => (
               <motion.article className="gc-preview-listing" key={listing.id} {...cardMotionProps(reducedMotion, index)} whileHover={reducedMotion ? {} : { y: -6 }}>
                 <div className="gc-preview-listing-image">
-                  {listing.image_url ? <img src={listing.image_url} alt={listing.title} loading="lazy" decoding="async" /> : <span>{listing.category_name || 'Item'}</span>}
+                  {listing.image_url ? <img src={listing.image_url} alt={listing.title} loading="lazy" decoding="async" {...imageSizeProps(listing)} /> : <span>{listing.category_name || 'Item'}</span>}
                 </div>
                 <div>
                   <h3>{listing.title}</h3>
@@ -1078,11 +1176,18 @@ function TextareaField({ label, className = '', ...props }) {
   )
 }
 
-function DashboardHero({ profile, onCreate }) {
+function DashboardHero({ profile, marketStats, onCreate }) {
   const reducedMotion = useReducedMotion()
+  const isSuspended = Boolean(profile?.is_suspended)
+  const stats = marketStats || {}
+  const heroStats = [
+    ['Listings in view', stats.total ?? '-'],
+    ['Available now', stats.available ?? '-'],
+    ['Categories', stats.categories ?? '-'],
+  ]
   return (
     <motion.section className="gc-dashboard-hero" {...motionProps(reducedMotion)}>
-      <div>
+      <div className="gc-dashboard-hero-copy">
         <span className="gc-eyebrow gc-eyebrow--dark">Welcome back</span>
         <h1>Find what you need on campus.</h1>
         <p>Browse real EMSI student listings, create your own item, and manage requests, meetings, loans, and sales from one place.</p>
@@ -1093,15 +1198,54 @@ function DashboardHero({ profile, onCreate }) {
           {profile?.overdue_count > 0 && <span className="gc-badge gc-badge--warn">Overdue history: {profile.overdue_count}</span>}
         </div>
       </div>
-      <button className="gc-btn gc-btn--primary gc-btn--hero-action" type="button" onClick={onCreate}>Create listing</button>
+      <aside className="gc-dashboard-hero-side" aria-label="Marketplace dashboard snapshot">
+        <div className="gc-hero-stat-grid">
+          {heroStats.map(([label, value]) => (
+            <div className="gc-hero-stat-card" key={label}>
+              <strong>{value}</strong>
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="gc-hero-highlight-card">
+          <span className="gc-eyebrow gc-eyebrow--dark">Latest highlight</span>
+          <strong>{stats.recentTitle || 'No listings yet'}</strong>
+          <p>{stats.recentTitle ? `${stats.recentCategory || 'Marketplace'} - ${stats.recentPrice || 'Free'}` : 'Create the first listing with a clear photo and campus handoff details.'}</p>
+        </div>
+        <button
+          className="gc-btn gc-btn--primary gc-btn--hero-action"
+          type="button"
+          disabled={isSuspended}
+          title={isSuspended ? suspendedAccountMessage : ''}
+          onClick={() => { if (!isSuspended) onCreate() }}
+        >
+          Create listing
+        </button>
+      </aside>
     </motion.section>
   )
 }
+
+function SuspendedAccountBanner({ profile }) {
+  const reducedMotion = useReducedMotion()
+  if (!profile?.is_suspended) return null
+
+  return (
+    <motion.section className="gc-suspension-banner" {...motionProps(reducedMotion)}>
+      <div>
+        <strong>{suspendedAccountMessage}</strong>
+        <p>{profile.suspension_reason || suspendedMarketplaceActionMessage}</p>
+      </div>
+      <span className="gc-badge gc-badge--danger">Marketplace actions paused</span>
+    </motion.section>
+  )
+}
+
 function ListingFilters({ filters, categories, onChange, onSubmit, onReset }) {
   const reducedMotion = useReducedMotion()
   return (
     <motion.form className="gc-filter-bar" onSubmit={onSubmit} {...motionProps(reducedMotion)}>
-      <input className="gc-input" placeholder="Search books, calculators, electronics..." value={filters.q} onChange={(e) => onChange('q', e.target.value)} />
+      <input className="gc-input gc-filter-search" placeholder="Search books, calculators, electronics..." value={filters.q} onChange={(e) => onChange('q', e.target.value)} />
       <select className="gc-input" value={filters.category} onChange={(e) => onChange('category', e.target.value)}>
         <option value="">All categories</option>
         {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
@@ -1125,16 +1269,20 @@ function ListingFilters({ filters, categories, onChange, onSubmit, onReset }) {
         <option value="true">Available</option>
         <option value="false">Unavailable</option>
       </select>
-      <input className="gc-input" type="number" min="0" placeholder="Min price" value={filters.min_price} onChange={(e) => onChange('min_price', e.target.value)} />
-      <input className="gc-input" type="number" min="0" placeholder="Max price" value={filters.max_price} onChange={(e) => onChange('max_price', e.target.value)} />
+      <div className="gc-price-filter-group">
+        <input className="gc-input" type="number" min="0" placeholder="Min MAD" value={filters.min_price} onChange={(e) => onChange('min_price', e.target.value)} />
+        <input className="gc-input" type="number" min="0" placeholder="Max MAD" value={filters.max_price} onChange={(e) => onChange('max_price', e.target.value)} />
+      </div>
       <select className="gc-input" value={filters.sort} onChange={(e) => onChange('sort', e.target.value)}>
         <option value="newest">Newest</option>
         <option value="oldest">Oldest</option>
         <option value="price_asc">Price low to high</option>
         <option value="price_desc">Price high to low</option>
       </select>
-      <button className="gc-btn gc-btn--primary">Apply</button>
-      <button className="gc-btn gc-btn--outline" type="button" onClick={onReset}>Reset</button>
+      <div className="gc-filter-actions">
+        <button className="gc-btn gc-btn--primary">Apply</button>
+        <button className="gc-btn gc-btn--outline" type="button" onClick={onReset}>Reset</button>
+      </div>
     </motion.form>
   )
 }
@@ -1144,7 +1292,7 @@ function ListingCard({ listing, index = 0, onView }) {
   return (
     <motion.article className="gc-listing-card" {...cardMotionProps(reducedMotion, index)} whileHover={reducedMotion ? {} : { y: -7 }}>
       <button className="gc-listing-image" type="button" onClick={() => onView(listing)}>
-        {listing.image_url ? <img src={listing.image_url} alt={listing.title} loading="lazy" decoding="async" /> : <span>{listing.category_name || 'Item'}</span>}
+        {listing.image_url ? <img src={listing.image_url} alt={listing.title} loading="lazy" decoding="async" {...imageSizeProps(listing)} /> : <span>{listing.category_name || 'Item'}</span>}
       </button>
       <div className="gc-listing-content">
         <div className="gc-listing-card-header">
@@ -1152,10 +1300,14 @@ function ListingCard({ listing, index = 0, onView }) {
           <strong>{formatPrice(listing.price)}</strong>
         </div>
         <p className="gc-listing-seller">{listing.seller_name || 'Student seller'}</p>
+        <div className="gc-listing-facts">
+          <span>{listing.campus || 'Campus not set'}</span>
+          <span>{formatDate(listing.created_at)}</span>
+        </div>
         <div className="gc-listing-meta">
           <span className="gc-tag">{listing.listing_type_display || listingTypeLabel(listing.listing_type)}</span>
           <span className="gc-tag">{formatCondition(listing.condition)}</span>
-          <span className={`gc-badge ${badgeToneForListingStatus(listing.status)}`}>{listing.status_display || formatTokenLabel(listing.status)}</span>
+          <span className={`gc-badge ${badgeToneForListingStatus(listing.status)}`}>{listing.is_available ? 'Available now' : (listing.status_display || formatTokenLabel(listing.status))}</span>
         </div>
         <div className="gc-card-actions">
           <button className="gc-btn gc-btn--secondary" onClick={() => onView(listing)}>View details</button>
@@ -1310,7 +1462,7 @@ function ListingForm({ categories, initialListing, busy, onCancel, onSubmit }) {
             onChange={changeImage}
             required={!initialListing?.image_url}
           />
-          <small>Required. Use JPG, JPEG, PNG, or WEBP.</small>
+          <small>Required. The original file is uploaded to Django media without thumbnail compression.</small>
           {imageError && <span className="gc-field-error">{imageError}</span>}
         </label>
         <div className={`gc-image-preview${imagePreview ? '' : ' gc-image-preview--empty'}`}>
@@ -1382,7 +1534,12 @@ function ListingDetails({
       <motion.article className="gc-detail-modal" role="dialog" aria-modal="true" aria-labelledby={`listing-title-${listing.id}`} onClick={(event) => event.stopPropagation()} initial={reducedMotion ? false : { opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.98 }} transition={{ duration: reducedMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}>
         <button className="gc-modal-close gc-detail-close" type="button" onClick={onClose} aria-label="Close listing details">x</button>
         <div className="gc-detail-image">
-          {listing.image_url ? <img src={listing.image_url} alt={listing.title} decoding="async" fetchPriority="high" /> : <span>{listing.category_name || 'Marketplace item'}</span>}
+          {listing.image_url ? (
+            <>
+              <img src={listing.image_url} alt={listing.title} decoding="async" fetchPriority="high" {...imageSizeProps(listing)} />
+              <a className="gc-image-open-link" href={listing.image_url} target="_blank" rel="noreferrer">Open full image</a>
+            </>
+          ) : <span>{listing.category_name || 'Marketplace item'}</span>}
         </div>
         <div className="gc-detail-body">
           <div className="gc-detail-header">
@@ -1459,8 +1616,8 @@ function ListingDetails({
             </motion.form>
           )}
           {!canManage && blockedBySuspension && (
-            <div className="gc-empty gc-empty--compact">
-              Your account is suspended until {profile?.suspension_until ? formatDateTime(profile.suspension_until) : 'an admin clears it'}, so requests and contact are paused.
+            <div className="gc-empty gc-empty--compact gc-empty--suspended">
+              {suspendedAccountMessage}
             </div>
           )}
           {!canManage && !blockedBySuspension && !canRequest && (
@@ -1598,37 +1755,28 @@ function NotificationList({ notifications, compact = false }) {
 
 function TransactionTimeline({ transaction }) {
   const reducedMotion = useReducedMotion()
-  const stepsByType = {
-    sale: ['Request', 'Accepted', 'Meeting', 'Sold'],
-    loan: ['Request', 'Accepted', 'Meeting', 'Loan active', 'Returned'],
-    exchange: ['Request', 'Accepted', 'Meeting', 'Completed'],
-    donate: ['Request', 'Accepted', 'Meeting', 'Completed'],
-  }
-  const statusIndex = {
-    pending: 0,
-    accepted: 1,
-    meeting_scheduled: 2,
-    handed_over: 2,
-    active_loan: 3,
-    overdue: 3,
-    sold: 3,
-    completed: 3,
-    returned: 4,
-  }
-  const steps = stepsByType[transaction.transaction_type] || stepsByType.sale
-  const currentIndex = statusIndex[transaction.status] ?? 0
+  const timeline = buildTransactionTimeline(transaction)
 
   return (
-    <motion.div className="gc-transaction-timeline" {...motionProps(reducedMotion)}>
-      {steps.map((step, index) => (
-        <div
-          key={`${transaction.id}-${step}`}
-          className={`gc-transaction-step${index <= currentIndex ? ' gc-transaction-step--done' : ''}${transaction.status === 'overdue' && index === currentIndex ? ' gc-transaction-step--danger' : ''}`}
-        >
-          <span>{index + 1}</span>
-          <small>{step}</small>
-        </div>
-      ))}
+    <motion.div className="gc-transaction-timeline-wrap" {...motionProps(reducedMotion)}>
+      <div className="gc-transaction-timeline" aria-label={`Transaction progress: ${timeline.title}`}>
+        {timeline.steps.map((step, index) => {
+          const state = timeline.stepStates[index]
+          return (
+            <div
+              key={`${transaction.id}-${step.key}`}
+              className={`gc-transaction-step gc-transaction-step--${state}`}
+              aria-current={state === 'current' || state === 'danger' ? 'step' : undefined}
+            >
+              <span>{index + 1}</span>
+              <small>{step.label}</small>
+            </div>
+          )
+        })}
+      </div>
+      <p className={`gc-transaction-status-note gc-transaction-status-note--${timeline.tone}`}>
+        <strong>{timeline.title}:</strong> {timeline.text}
+      </p>
     </motion.div>
   )
 }
@@ -1827,7 +1975,7 @@ function TransactionCard({
             Mark sold
           </button>
         )}
-        {transaction.available_actions?.includes('complete') && (
+        {transaction.transaction_type !== 'loan' && transaction.status !== 'overdue' && transaction.available_actions?.includes('complete') && (
           <button className="gc-btn gc-btn--primary gc-btn--compact" type="button" disabled={isBusy} onClick={() => onAction(transaction, 'complete', { seller_note: form.seller_note })}>
             Mark completed
           </button>
@@ -1924,7 +2072,7 @@ function AdminResolveModal({ transaction, busy, onCancel, onResolve }) {
   )
 }
 
-function MarketplaceSection({ access, profile, mode, openCreateSignal = 0, setNotice, setError }) {
+function MarketplaceSection({ access, profile, mode, openCreateSignal = 0, onStatsChange, setNotice, setError }) {
   const [categories, setCategories] = useState([])
   const [listings, setListings] = useState([])
   const [filters, setFilters] = useState(emptyFilters)
@@ -1968,6 +2116,17 @@ function MarketplaceSection({ access, profile, mode, openCreateSignal = 0, setNo
       ])
       setCategories(categoryData)
       setListings(listingData)
+      if (onStatsChange) {
+        const recent = listingData[0]
+        onStatsChange({
+          total: listingData.length,
+          available: listingData.filter((listing) => listing.is_available).length,
+          categories: categoryData.length,
+          recentTitle: recent?.title || '',
+          recentCategory: recent?.category_name || recent?.listing_type_display || '',
+          recentPrice: recent ? formatPrice(recent.price) : '',
+        })
+      }
       if (activeListingId) {
         const refreshedListing = listingData.find((listing) => listing.id === activeListingId)
         setSelectedListing(refreshedListing || null)
@@ -1978,7 +2137,7 @@ function MarketplaceSection({ access, profile, mode, openCreateSignal = 0, setNo
     } finally {
       setLoading(false)
     }
-  }, [headers, setError])
+  }, [headers, onStatsChange, setError])
 
   useEffect(() => {
     if (access) loadMarketplace()
@@ -1986,10 +2145,14 @@ function MarketplaceSection({ access, profile, mode, openCreateSignal = 0, setNo
 
   useEffect(() => {
     if (!openCreateSignal) return
+    if (isSuspended) {
+      setError(suspendedAccountMessage)
+      return
+    }
     setEditingListing(null)
     setSelectedListing(null)
     setShowForm(true)
-  }, [openCreateSignal])
+  }, [openCreateSignal, isSuspended, setError])
 
   useEffect(() => {
     if (selectedListing) setRequestForm(buildRequestForm(selectedListing))
@@ -2000,6 +2163,10 @@ function MarketplaceSection({ access, profile, mode, openCreateSignal = 0, setNo
   }
 
   async function saveListing(payload) {
+    if (isSuspended && !editingListing) {
+      setError(suspendedAccountMessage)
+      return
+    }
     setBusy(true)
     setError('')
     setNotice('')
@@ -2046,6 +2213,10 @@ function MarketplaceSection({ access, profile, mode, openCreateSignal = 0, setNo
   }
 
   async function createTransactionRequest(listing) {
+    if (isSuspended) {
+      setError(suspendedAccountMessage)
+      return
+    }
     setRequestBusy(true)
     setError('')
     try {
@@ -2075,16 +2246,26 @@ function MarketplaceSection({ access, profile, mode, openCreateSignal = 0, setNo
     }
   }
 
-  const shownListings = mode === 'dashboard' ? listings.slice(0, 9) : listings
+  const shownListings = mode === 'dashboard' ? listings.slice(0, 12) : listings
 
   return (
     <motion.section className="gc-marketplace-shell" {...pageTransition} transition={{ duration: reducedMotion ? 0 : 0.34 }}>
+      {mode !== 'dashboard' && <SuspendedAccountBanner profile={profile} />}
       <motion.div className="gc-section-header" {...motionProps(reducedMotion)}>
         <div>
           <h2>{mode === 'dashboard' ? 'Marketplace highlights' : 'Marketplace'}</h2>
           <p>Browse real listings from GreenCampus students.</p>
         </div>
-        <button className="gc-btn gc-btn--primary" disabled={isSuspended} title={isSuspended ? 'Suspended accounts cannot create listings.' : ''} onClick={() => { setEditingListing(null); setShowForm(true) }}>Create listing</button>
+        {mode !== 'dashboard' && (
+          <button
+            className="gc-btn gc-btn--primary"
+            disabled={isSuspended}
+            title={isSuspended ? suspendedAccountMessage : ''}
+            onClick={() => { if (!isSuspended) { setEditingListing(null); setShowForm(true) } }}
+          >
+            Create listing
+          </button>
+        )}
       </motion.div>
 
       <ListingFilters
@@ -2193,6 +2374,10 @@ function MyListingsPage({ access, profile, setNotice, setError }) {
   }, [selectedListing])
 
   async function saveListing(payload) {
+    if (isSuspended && !editingListing) {
+      setError(suspendedAccountMessage)
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -2235,12 +2420,20 @@ function MyListingsPage({ access, profile, setNotice, setError }) {
 
   return (
     <motion.section className="gc-marketplace-shell" {...pageTransition} transition={{ duration: reducedMotion ? 0 : 0.34 }}>
+      <SuspendedAccountBanner profile={profile} />
       <div className="gc-section-header">
         <div>
           <h2>My Listings</h2>
           <p>Create, update, hide, or delete the items you own.</p>
         </div>
-        <button className="gc-btn gc-btn--primary" disabled={isSuspended} title={isSuspended ? 'Suspended accounts cannot create listings.' : ''} onClick={() => { setEditingListing(null); setSelectedListing(null); setShowForm(true) }}>Create listing</button>
+        <button
+          className="gc-btn gc-btn--primary"
+          disabled={isSuspended}
+          title={isSuspended ? suspendedAccountMessage : ''}
+          onClick={() => { if (!isSuspended) { setEditingListing(null); setSelectedListing(null); setShowForm(true) } }}
+        >
+          Create listing
+        </button>
       </div>
 
       {loading ? (
@@ -2789,13 +2982,15 @@ function DashboardNotifications({ access, setError }) {
 
 function DashboardPage({ access, profile, setNotice, setError }) {
   const [createSignal, setCreateSignal] = useState(0)
+  const [marketStats, setMarketStats] = useState(null)
   const reducedMotion = useReducedMotion()
 
   return (
     <motion.div className="gc-dashboard-page" {...pageTransition} transition={{ duration: reducedMotion ? 0 : 0.34 }}>
       <DashboardNotifications access={access} setError={setError} />
-      <DashboardHero profile={profile} onCreate={() => setCreateSignal((current) => current + 1)} />
-      <MarketplaceSection access={access} profile={profile} mode="dashboard" openCreateSignal={createSignal} setNotice={setNotice} setError={setError} />
+      <SuspendedAccountBanner profile={profile} />
+      <DashboardHero profile={profile} marketStats={marketStats} onCreate={() => setCreateSignal((current) => current + 1)} />
+      <MarketplaceSection access={access} profile={profile} mode="dashboard" openCreateSignal={createSignal} onStatsChange={setMarketStats} setNotice={setNotice} setError={setError} />
     </motion.div>
   )
 }
@@ -3376,10 +3571,15 @@ function AdminPage({ access, profile, setNotice, setError }) {
                 </div>
                 <div className="gc-admin-user-meta">
                   {user.overdue_count > 0 && <span className="gc-admin-meta-warning">Overdue count: {user.overdue_count}</span>}
+                  {user.active_overdue_items?.length > 0 && (
+                    <span className="gc-admin-meta-warning">
+                      Overdue item: {user.active_overdue_items.map((item) => item.listing_title).join(', ')}
+                    </span>
+                  )}
                   {user.suspension_until && <span>Suspended until {formatDateTime(user.suspension_until)}</span>}
                   {user.suspension_reason && <span>Suspension: {user.suspension_reason}</span>}
                   {user.blacklist_reason && <span>Blacklist: {user.blacklist_reason}</span>}
-                  {!user.overdue_count && !user.suspension_reason && !user.blacklist_reason && <span>No moderation notes.</span>}
+                  {!user.overdue_count && !user.active_overdue_items?.length && !user.suspension_reason && !user.blacklist_reason && <span>No moderation notes.</span>}
                 </div>
                 <AdminUserActionsMenu
                   user={user}

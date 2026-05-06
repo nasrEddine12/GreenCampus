@@ -135,6 +135,7 @@ class AdminUserListView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
+        refresh_overdue_transactions()
         filter_status = request.query_params.get("status", "").lower()
         queryset = User.objects.all().order_by("-date_joined")
 
