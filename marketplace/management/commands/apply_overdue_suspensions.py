@@ -4,7 +4,7 @@ from marketplace.models import apply_overdue_suspensions, refresh_overdue_transa
 
 
 class Command(BaseCommand):
-    help = "Refresh overdue loan transactions and apply one-week suspensions after the 24-hour warning period."
+    help = "Refresh overdue loan transactions and suspend borrowers after the 24-hour warning period."
 
     def handle(self, *args, **options):
         overdue_transactions = refresh_overdue_transactions()

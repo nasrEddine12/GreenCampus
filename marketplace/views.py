@@ -21,6 +21,7 @@ from .models import (
     Transaction,
     OVERDUE_WARNING_HOURS,
     OVERDUE_WARNING_MESSAGE,
+    SUSPENDED_MARKETPLACE_ACTION_MESSAGE,
     apply_overdue_suspensions,
     refresh_overdue_transactions,
 )
@@ -269,9 +270,8 @@ class ListingListCreateView(generics.ListCreateAPIView):
         return [IsAuthenticated()]
 
     def perform_create(self, serializer):
-        self.request.user.expire_suspension_if_needed()
         if self.request.user.suspension_is_active():
-            raise PermissionDenied("Your account is suspended and cannot create listings right now.")
+            raise PermissionDenied(SUSPENDED_MARKETPLACE_ACTION_MESSAGE)
         serializer.save(seller=self.request.user)
 
 
@@ -366,7 +366,6 @@ class NotificationListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        request.user.expire_suspension_if_needed()
         refresh_overdue_transactions()
 
         notifications = []

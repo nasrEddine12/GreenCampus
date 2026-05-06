@@ -358,10 +358,11 @@ def sync_user_overdue_counts(user_ids=None):
 
 
 OVERDUE_WARNING_HOURS = 24
-OVERDUE_SUSPENSION_DAYS = 7
 OVERDUE_WARNING_MESSAGE = (
-    "You have an overdue item. Please return it within 24 hours or your account will be suspended for 1 week."
+    "You have an overdue item. Please return it within 24 hours or your account will be suspended."
 )
+OVERDUE_SUSPENSION_REASON = "Overdue item not returned after 24h warning period."
+SUSPENDED_MARKETPLACE_ACTION_MESSAGE = "Your account is suspended because an overdue item was not returned."
 
 
 def refresh_overdue_transactions(today=None, now=None):
@@ -425,21 +426,26 @@ def apply_overdue_suspensions(now=None):
     )
 
     suspended_user_ids = set()
-    suspension_until = now + timezone.timedelta(days=OVERDUE_SUSPENSION_DAYS)
 
     for transaction in transactions:
         user = transaction.requester
         if user.is_staff or user.is_superuser:
             continue
 
+        already_enforced = (
+            user.is_suspended
+            and user.suspension_reason == OVERDUE_SUSPENSION_REASON
+            and user.suspension_until is None
+            and not user.can_contact
+        )
+        if already_enforced:
+            continue
+
         user.is_suspended = True
         user.can_contact = False
         user.suspended_at = user.suspended_at or now
-        user.suspension_until = suspension_until
-        user.suspension_reason = (
-            f"Automatic overdue suspension: '{transaction.listing.title}' was not returned "
-            f"within 24 hours of the overdue warning."
-        )
+        user.suspension_until = None
+        user.suspension_reason = OVERDUE_SUSPENSION_REASON
         user.save(
             update_fields=[
                 "is_suspended",

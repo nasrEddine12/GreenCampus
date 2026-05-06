@@ -13,7 +13,16 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Category, ContactMessage, Favorite, Listing, OVERDUE_WARNING_MESSAGE, Transaction
+from .models import (
+    Category,
+    ContactMessage,
+    Favorite,
+    Listing,
+    OVERDUE_SUSPENSION_REASON,
+    OVERDUE_WARNING_MESSAGE,
+    SUSPENDED_MARKETPLACE_ACTION_MESSAGE,
+    Transaction,
+)
 
 User = get_user_model()
 TEST_MEDIA_ROOT = tempfile.mkdtemp(prefix="green-campus-test-media-")
@@ -118,6 +127,8 @@ class MarketplaceApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("/media/listings/", response.data["image_url"])
+        self.assertEqual(response.data["image_width"], 1600)
+        self.assertEqual(response.data["image_height"], 1000)
         listing = Listing.objects.get(pk=response.data["id"])
         with Image.open(listing.image.path) as stored_image:
             self.assertEqual(stored_image.size, (1600, 1000))
@@ -459,8 +470,8 @@ class MarketplaceApiTests(APITestCase):
         self.buyer.refresh_from_db()
         self.assertTrue(self.buyer.is_suspended)
         self.assertFalse(self.buyer.can_contact)
-        self.assertIn("Automatic overdue suspension", self.buyer.suspension_reason)
-        self.assertGreater(self.buyer.suspension_until, timezone.now() + timedelta(days=6))
+        self.assertEqual(self.buyer.suspension_reason, OVERDUE_SUSPENSION_REASON)
+        self.assertIsNone(self.buyer.suspension_until)
 
         self.authenticate(self.buyer)
         blocked_listing_response = self.client.post(
@@ -478,6 +489,7 @@ class MarketplaceApiTests(APITestCase):
             format="multipart",
         )
         self.assertEqual(blocked_listing_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(blocked_listing_response.data["detail"], SUSPENDED_MARKETPLACE_ACTION_MESSAGE)
 
         available_listing = Listing.objects.create(
             seller=self.seller,
@@ -496,6 +508,7 @@ class MarketplaceApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(request_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(SUSPENDED_MARKETPLACE_ACTION_MESSAGE, str(request_response.data))
 
         contact_response = self.client.post(
             reverse("marketplace:message-list-create"),
@@ -503,6 +516,7 @@ class MarketplaceApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(contact_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(SUSPENDED_MARKETPLACE_ACTION_MESSAGE, str(contact_response.data))
 
     def test_normal_user_cannot_access_admin_transaction_endpoints(self):
         self.authenticate(self.buyer)

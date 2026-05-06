@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from .models import (
     OVERDUE_WARNING_HOURS,
+    SUSPENDED_MARKETPLACE_ACTION_MESSAGE,
     Category,
     ContactMessage,
     Favorite,
@@ -13,6 +14,10 @@ from .models import (
     Review,
     Transaction,
 )
+
+
+ALLOWED_LISTING_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_LISTING_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 
 def _display_name(user):
@@ -99,6 +104,8 @@ class ListingSerializer(serializers.ModelSerializer):
     seller_name = serializers.SerializerMethodField()
     category_name = serializers.CharField(source="category.name", read_only=True)
     image_url = serializers.SerializerMethodField()
+    image_width = serializers.SerializerMethodField()
+    image_height = serializers.SerializerMethodField()
     listing_type_display = serializers.CharField(source="get_listing_type_display", read_only=True)
     condition_display = serializers.CharField(source="get_condition_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
@@ -116,6 +123,8 @@ class ListingSerializer(serializers.ModelSerializer):
             "description",
             "image",
             "image_url",
+            "image_width",
+            "image_height",
             "listing_type",
             "listing_type_display",
             "campus",
@@ -136,6 +145,8 @@ class ListingSerializer(serializers.ModelSerializer):
             "seller_name",
             "category_name",
             "image_url",
+            "image_width",
+            "image_height",
             "listing_type_display",
             "condition_display",
             "status_display",
@@ -159,6 +170,28 @@ class ListingSerializer(serializers.ModelSerializer):
         if obj.image_url:
             return obj.image_url
         return ""
+
+    def get_image_width(self, obj):
+        try:
+            return obj.image.width if obj.image else None
+        except Exception:
+            return None
+
+    def get_image_height(self, obj):
+        try:
+            return obj.image.height if obj.image else None
+        except Exception:
+            return None
+
+    def validate_image(self, value):
+        if not value:
+            return value
+
+        content_type = getattr(value, "content_type", "")
+        name = getattr(value, "name", "").lower()
+        if content_type not in ALLOWED_LISTING_IMAGE_TYPES or not name.endswith(ALLOWED_LISTING_IMAGE_EXTENSIONS):
+            raise serializers.ValidationError("Upload a JPG, JPEG, PNG, or WEBP image.")
+        return value
 
     def validate(self, attrs):
         image = attrs.get("image")
@@ -218,9 +251,8 @@ class ContactMessageSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         listing = attrs["listing"]
 
-        request.user.expire_suspension_if_needed()
         if request.user.suspension_is_active():
-            raise serializers.ValidationError("Your account is suspended and cannot contact sellers right now.")
+            raise serializers.ValidationError(SUSPENDED_MARKETPLACE_ACTION_MESSAGE)
 
         if not request.user.can_contact:
             raise serializers.ValidationError("Your account cannot send contact messages right now.")
@@ -412,9 +444,8 @@ class TransactionCreateSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         listing = attrs["listing"]
 
-        request.user.expire_suspension_if_needed()
         if request.user.suspension_is_active():
-            raise serializers.ValidationError("Your account is suspended and cannot request items right now.")
+            raise serializers.ValidationError(SUSPENDED_MARKETPLACE_ACTION_MESSAGE)
 
         if not request.user.can_contact:
             raise serializers.ValidationError("Your account cannot create requests right now.")
