@@ -107,6 +107,7 @@ class ProfileView(APIView):
 
     def get(self, request):
         """Return profile data for the logged-in user."""
+        request.user.expire_suspension_if_needed()
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

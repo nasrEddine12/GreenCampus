@@ -116,7 +116,8 @@ class LoginSerializer(serializers.Serializer):
                 detail="Your account is blacklisted."
             )
 
-        if user.is_suspended:
+        user.expire_suspension_if_needed()
+        if user.suspension_is_active():
             raise PermissionDenied(
                 detail="Your account is suspended."
             )
@@ -132,9 +133,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "username", "email", "filiere", "phone",
-            "is_verified", "is_suspended", "is_blacklisted", "is_staff",
+            "is_verified", "is_suspended", "is_blacklisted", "is_staff", "is_superuser",
+            "can_contact", "overdue_count", "suspension_reason", "suspended_at", "suspension_until",
         ]
         read_only_fields = [
             "username", "email", "is_verified",
-            "is_suspended", "is_blacklisted", "is_staff",
+            "is_suspended", "is_blacklisted", "is_staff", "is_superuser",
+            "can_contact", "overdue_count", "suspension_reason", "suspended_at", "suspension_until",
         ]

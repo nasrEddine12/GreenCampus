@@ -23,11 +23,14 @@ class AdminUserListSerializer(serializers.ModelSerializer):
             "is_suspended",
             "suspension_reason",
             "suspended_at",
+            "suspension_until",
             "is_blacklisted",
             "blacklist_reason",
             "blacklisted_at",
+            "can_contact",
             "overdue_count",
             "is_staff",
+            "is_superuser",
             "is_active",
             "date_joined",
         ]
@@ -42,3 +45,21 @@ class ModerationActionSerializer(serializers.Serializer):
         required=True,
         help_text="Explain why this action is being taken.",
     )
+
+
+class AdminModerationActionSerializer(serializers.Serializer):
+    """Validate a single admin moderation action."""
+
+    ACTIONS = (
+        "suspend",
+        "unsuspend",
+        "blacklist",
+        "unblacklist",
+        "enable_contact",
+        "disable_contact",
+        "deactivate",
+    )
+
+    action = serializers.ChoiceField(choices=ACTIONS)
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    suspension_until = serializers.DateTimeField(required=False, allow_null=True)

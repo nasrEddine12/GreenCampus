@@ -10,7 +10,22 @@ class IsListingOwnerOrReadOnly(BasePermission):
 
 class IsTransactionParticipant(BasePermission):
     def has_object_permission(self, request, view, obj):
-        return request.user.is_authenticated and request.user.id in {obj.borrower_id, obj.lender_id}
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        return request.user.id in {obj.requester_id, obj.seller_id}
+
+
+class IsTransactionSellerOrAdmin(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if not request.user.is_authenticated:
+            return False
+        return bool(
+            request.user.is_staff
+            or request.user.is_superuser
+            or obj.seller_id == request.user.id
+        )
 
 
 class IsContactParticipant(BasePermission):

@@ -12,8 +12,8 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Listing)
 class ListingAdmin(admin.ModelAdmin):
-    list_display = ["title", "seller", "category", "price", "eco_score", "is_available"]
-    list_filter = ["is_available", "condition", "category"]
+    list_display = ["title", "seller", "listing_type", "status", "category", "price", "eco_score", "is_available"]
+    list_filter = ["listing_type", "status", "is_available", "condition", "category"]
     search_fields = ["title", "description", "seller__email"]
 
 
@@ -36,13 +36,16 @@ class TransactionAdmin(admin.ModelAdmin):
         "listing",
         "transaction_type",
         "status",
-        "borrower",
-        "lender",
-        "amount",
-        "loan_end",
+        "requester",
+        "seller",
+        "price",
+        "meeting_datetime",
+        "expected_return_date",
+        "actual_return_date",
+        "was_ever_overdue",
     ]
-    list_filter = ["transaction_type", "status"]
-    search_fields = ["listing__title", "borrower__email", "lender__email"]
+    list_filter = ["transaction_type", "status", "meeting_status", "was_ever_overdue"]
+    search_fields = ["listing__title", "requester__email", "seller__email", "message", "meeting_location"]
 
 
 @admin.register(Review)

@@ -9,11 +9,11 @@ class UserAdmin(admin.ModelAdmin):
     """Expose the custom user model in Django admin."""
 
     list_display = [
-        "email", "filiere", "is_verified",
-        "is_suspended", "is_blacklisted", "overdue_count",
+        "username", "email", "filiere", "is_active", "is_verified",
+        "is_suspended", "is_blacklisted", "can_contact", "overdue_count",
     ]
     list_filter = [
-        "is_suspended", "is_blacklisted", "is_verified", "filiere",
+        "is_active", "is_suspended", "is_blacklisted", "can_contact", "is_verified", "filiere",
     ]
     search_fields = ["email", "username", "filiere"]
     ordering = ["-date_joined"]
